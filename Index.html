@@ -1338,6 +1338,20 @@ body::after {
         </div>
 
         <div class="glass-card">
+          <div class="settings-section-title">🤖 Modelo de texto</div>
+          <div class="form-group">
+            <label class="form-label">Modelo para análisis y guion</label>
+            <select class="form-select" id="textModelSelect" onchange="saveTextModel()">
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash ⭐ (recomendado, más compatible)</option>
+              <option value="gemini-2.5-pro">Gemini 2.5 Pro (más potente, requiere billing activo)</option>
+              <option value="gemini-2.0-flash">Gemini 2.0 Flash (alternativa)</option>
+              <option value="gemini-1.5-flash">Gemini 1.5 Flash (legacy)</option>
+            </select>
+            <p style="font-size:12px; color:var(--text3); margin-top:8px;">Si ves errores de modelo no encontrado, usa <strong style="color:var(--blue2)">Gemini 2.5 Flash</strong>. Usa "Verificar conexión" para saber cuáles tienes disponibles.</p>
+          </div>
+        </div>
+
+        <div class="glass-card">
           <div class="settings-section-title">🎨 Preferencias de presentación</div>
           <div class="form-group">
             <label class="form-label">Tono general</label>
@@ -1667,6 +1681,14 @@ function loadSettingsUI() {
   document.getElementById('settingFocus').value = s.focus || '';
   document.getElementById('settingStyle').value = s.style || '';
   document.getElementById('settingContext').value = s.context || '';
+  const savedModel = localStorage.getItem('tai_text_model') || 'gemini-2.5-flash';
+  document.getElementById('textModelSelect').value = savedModel;
+}
+
+function saveTextModel() {
+  const model = document.getElementById('textModelSelect').value;
+  localStorage.setItem('tai_text_model', model);
+  showNotification(`Modelo cambiado a ${model} ✓`, 'success');
 }
 
 function saveApiKey() {
@@ -1705,7 +1727,8 @@ async function callGeminiText(prompt, retries = 3) {
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`, {
+      const textModel = localStorage.getItem('tai_text_model') || 'gemini-2.5-flash';
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${textModel}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2542,9 +2565,9 @@ async function testApiConnection() {
   result.style.display = 'none';
 
   const models = [
-    { name: 'gemini-2.5-pro', label: 'Texto (Gemini 2.5 Pro)', type: 'text' },
-    { name: 'gemini-2.5-flash', label: 'Texto alternativo (Gemini 2.5 Flash)', type: 'text' },
-    { name: 'gemini-2.5-flash-preview-image-generation', label: 'Imágenes (Gemini 2.5 Flash Image)', type: 'image' },
+    { name: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (texto)', type: 'text' },
+    { name: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (texto)', type: 'text' },
+    { name: 'gemini-2.5-flash-preview-image-generation', label: 'Gemini 2.5 Flash Image (imágenes)', type: 'image' },
   ];
 
   let html = '<div style="font-weight:600; margin-bottom:10px; color:var(--text);">Resultado del diagnóstico:</div>';
