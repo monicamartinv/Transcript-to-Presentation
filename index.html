@@ -1183,6 +1183,10 @@ body::after {
       <a class="nav-item" onclick="navigate('settings')" id="nav-settings">
         <span class="nav-icon">⚙️</span> Ajustes
       </a>
+      <div style="margin-top:12px; padding:10px 14px; background:rgba(79,142,247,0.08); border:1px solid rgba(79,142,247,0.2); border-radius:10px; font-size:11px; color:var(--text3);">
+        <div style="color:var(--blue2); font-weight:600; margin-bottom:2px;">Modelo activo:</div>
+        <div id="sidebarModelName">gemini-2.5-flash</div>
+      </div>
     </div>
     <div class="sidebar-footer">
       <div class="user-chip">
@@ -1330,7 +1334,22 @@ body::after {
             </div>
             <p style="font-size:12px; color:var(--text3); margin-top:8px;">Obtén tu clave en <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--blue2)">aistudio.google.com</a></p>
           </div>
-          <button class="btn btn-primary" onclick="saveApiKey()">Guardar clave</button>
+          <div class="divider"></div>
+          <div class="form-group">
+            <label class="form-label">🤖 Modelo de Gemini para texto</label>
+            <select class="form-select" id="textModelSelect" onchange="saveTextModel()">
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash ⭐ Recomendado</option>
+              <option value="gemini-2.5-pro">Gemini 2.5 Pro (requiere billing activo)</option>
+              <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+              <option value="gemini-1.5-flash">Gemini 1.5 Flash (legacy)</option>
+            </select>
+            <p style="font-size:12px; color:var(--text3); margin-top:6px;">⚠️ Si ves error "model not found" selecciona <strong style="color:var(--blue2)">Gemini 2.5 Flash</strong></p>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="saveApiKey()">Guardar clave</button>
+            <button class="btn btn-secondary" onclick="testApiConnection()" id="testApiBtn">🔍 Verificar conexión</button>
+          </div>
+          <div id="apiTestResult" style="display:none; margin-top:14px; padding:14px; border-radius:10px; font-size:13px; line-height:1.6;"></div>
         </div>
 
         <div class="glass-card">
@@ -1555,6 +1574,8 @@ function loginUser(user) {
   document.getElementById('appShell').style.display = 'flex';
   document.getElementById('userName').textContent = user.name || user.email;
   document.getElementById('userAvatar').textContent = (user.name || user.email)[0].toUpperCase();
+  const savedModel = localStorage.getItem('tai_text_model') || 'gemini-2.5-flash';
+  document.getElementById('sidebarModelName').textContent = savedModel;
   loadSettings();
   showNotification(`Bienvenido, ${user.name || user.email}! 👋`, 'success');
 }
@@ -1663,6 +1684,15 @@ function loadSettingsUI() {
   document.getElementById('settingFocus').value = s.focus || '';
   document.getElementById('settingStyle').value = s.style || '';
   document.getElementById('settingContext').value = s.context || '';
+  const savedModel = localStorage.getItem('tai_text_model') || 'gemini-2.5-flash';
+  document.getElementById('textModelSelect').value = savedModel;
+}
+
+function saveTextModel() {
+  const model = document.getElementById('textModelSelect').value;
+  localStorage.setItem('tai_text_model', model);
+  document.getElementById('sidebarModelName').textContent = model;
+  showNotification(`Modelo cambiado a ${model} ✓`, 'success');
 }
 
 function saveApiKey() {
@@ -1701,7 +1731,8 @@ async function callGeminiText(prompt, retries = 3) {
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${apiKey}`, {
+      const textModel = localStorage.getItem('tai_text_model') || 'gemini-2.5-flash';
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${textModel}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1711,9 +1742,12 @@ async function callGeminiText(prompt, retries = 3) {
       });
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error?.message || `Error ${res.status}`);
+        const errMsg = err?.error?.message || `Error HTTP ${res.status}`;
+        const errCode = err?.error?.code || res.status;
+        throw new Error(`[Google ${errCode}] ${errMsg}`);
       }
       const data = await res.json();
+      if (!data.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error("La API no devolvió texto válido. Intenta de nuevo.");
       return data.candidates[0].content.parts[0].text;
     } catch (e) {
       if (attempt === retries) throw e;
@@ -1729,7 +1763,7 @@ async function callGeminiImage(prompt, retries = 3) {
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-image-generation:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1742,7 +1776,9 @@ async function callGeminiImage(prompt, retries = 3) {
       });
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error?.message || `Error ${res.status}`);
+        const errMsg = err?.error?.message || `Error HTTP ${res.status}`;
+        const errCode = err?.error?.code || res.status;
+        throw new Error(`[Google ${errCode}] ${errMsg}`);
       }
       const data = await res.json();
       const parts = data.candidates[0].content.parts;
@@ -1772,7 +1808,7 @@ async function callGeminiRemix(imageBase64, prompt, retries = 3) {
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-image-generation:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1790,7 +1826,9 @@ async function callGeminiRemix(imageBase64, prompt, retries = 3) {
       });
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error?.message || `Error ${res.status}`);
+        const errMsg = err?.error?.message || `Error HTTP ${res.status}`;
+        const errCode = err?.error?.code || res.status;
+        throw new Error(`[Google ${errCode}] ${errMsg}`);
       }
       const data = await res.json();
       const parts = data.candidates[0].content.parts;
@@ -2515,6 +2553,58 @@ Write ONLY the visual description in English, including the exact text to displa
     hideProgress();
     showNotification('Error: ' + e.message, 'error');
   }
+}
+
+// ============================================================
+// API DIAGNOSTICS
+// ============================================================
+async function testApiConnection() {
+  const key = document.getElementById('apiKeyInput').value.trim() || getApiKey();
+  if (!key) { showNotification('Introduce tu API key primero', 'error'); return; }
+
+  const btn = document.getElementById('testApiBtn');
+  const result = document.getElementById('apiTestResult');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Verificando...';
+  result.style.display = 'none';
+
+  const models = [
+    { name: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (texto)', type: 'text' },
+    { name: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (texto)', type: 'text' },
+    { name: 'gemini-2.5-flash-preview-image-generation', label: 'Gemini 2.5 Flash Image (imágenes)', type: 'image' },
+  ];
+
+  let html = '<div style="font-weight:600; margin-bottom:10px; color:var(--text);">Resultado del diagnóstico:</div>';
+
+  for (const m of models) {
+    try {
+      const body = m.type === 'image'
+        ? { contents: [{ parts: [{ text: 'Draw a simple blue circle' }] }], generationConfig: { responseModalities: ['IMAGE','TEXT'] } }
+        : { contents: [{ parts: [{ text: 'Responde solo: OK' }] }], generationConfig: { maxOutputTokens: 10 } };
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m.name}:generateContent?key=${key}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (res.ok) {
+        html += `<div style="color:var(--success); margin-bottom:6px;">✓ ${m.label} — <strong>Disponible</strong></div>`;
+      } else {
+        const err = await res.json();
+        const msg = err.error?.message || `HTTP ${res.status}`;
+        html += `<div style="color:var(--error); margin-bottom:6px;">✕ ${m.label} — ${msg}</div>`;
+      }
+    } catch(e) {
+      html += `<div style="color:var(--warning); margin-bottom:6px;">⚠ ${m.label} — Error de red: ${e.message}</div>`;
+    }
+  }
+
+  result.innerHTML = html;
+  result.style.display = 'block';
+  result.style.background = 'var(--surface)';
+  result.style.border = '1px solid var(--border)';
+  btn.disabled = false;
+  btn.innerHTML = '🔍 Verificar conexión';
 }
 
 // ============================================================
